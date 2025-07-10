@@ -1,17 +1,19 @@
 const undici = require('undici');
 const fetch = require('node-fetch');
 const passport = require('passport');
-const client = require('openid-client');
 const jwtDecode = require('jsonwebtoken/decode');
 const { CacheKeys } = require('librechat-data-provider');
 const { HttpsProxyAgent } = require('https-proxy-agent');
 const { hashToken, logger } = require('@librechat/data-schemas');
-const { Strategy: OpenIDStrategy } = require('openid-client/passport');
 const { isEnabled, safeStringify, logHeaders } = require('@librechat/api');
 const { getStrategyFunctions } = require('~/server/services/Files/strategies');
 const { findUser, createUser, updateUser } = require('~/models');
 const { getBalanceConfig } = require('~/server/services/Config');
 const getLogStores = require('~/cache/getLogStores');
+
+// Dynamic imports for ES modules
+let client;
+let OpenIDStrategy;
 
 /**
  * @typedef {import('openid-client').ClientMetadata} ClientMetadata
@@ -268,6 +270,14 @@ function convertToUsername(input, defaultValue = '') {
  */
 async function setupOpenId() {
   try {
+    // Dynamic import for ES modules
+    if (!client) {
+      client = await import('openid-client');
+    }
+    if (!OpenIDStrategy) {
+      const { Strategy } = await import('openid-client/passport');
+      OpenIDStrategy = Strategy;
+    }
     /** @type {ClientMetadata} */
     const clientMetadata = {
       client_id: process.env.OPENID_CLIENT_ID,
