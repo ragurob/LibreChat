@@ -15,6 +15,20 @@ const getLogStores = require('~/cache/getLogStores');
 let client;
 let OpenIDStrategy;
 
+// Import OpenID Strategy immediately to avoid class extension issues
+const importOpenIDStrategy = async () => {
+  if (!OpenIDStrategy) {
+    try {
+      const passportModule = await import('openid-client/passport');
+      OpenIDStrategy = passportModule.Strategy;
+    } catch (err) {
+      console.warn('OpenID passport strategy not available');
+      return null;
+    }
+  }
+  return OpenIDStrategy;
+};
+
 /**
  * @typedef {import('openid-client').ClientMetadata} ClientMetadata
  * @typedef {import('openid-client').Configuration} Configuration
@@ -96,19 +110,22 @@ let openidConfig = null;
 //overload currenturl function because of express version 4 buggy req.host doesn't include port
 //More info https://github.com/panva/openid-client/pull/713
 
-class CustomOpenIDStrategy extends OpenIDStrategy {
-  currentUrl(req) {
-    const hostAndProtocol = process.env.DOMAIN_SERVER;
-    return new URL(`${hostAndProtocol}${req.originalUrl ?? req.url}`);
-  }
-  authorizationRequestParams(req, options) {
-    const params = super.authorizationRequestParams(req, options);
-    if (options?.state && !params.has('state')) {
-      params.set('state', options.state);
+// Dynamic class creation function
+const createCustomOpenIDStrategy = (BaseStrategy) => {
+  return class CustomOpenIDStrategy extends BaseStrategy {
+    currentUrl(req) {
+      const hostAndProtocol = process.env.DOMAIN_SERVER;
+      return new URL(`${hostAndProtocol}${req.originalUrl ?? req.url}`);
     }
-    return params;
-  }
-}
+    authorizationRequestParams(req, options) {
+      const params = super.authorizationRequestParams(req, options);
+      if (options?.state && !params.has('state')) {
+        params.set('state', options.state);
+      }
+      return params;
+    }
+  };
+};
 
 /**
  * Exchange the access token for a new access token using the on-behalf-of flow if required.
@@ -275,15 +292,16 @@ async function setupOpenId() {
       const openidClient = await import('openid-client');
       client = openidClient;
     }
-    if (!OpenIDStrategy) {
-      try {
-        const passportModule = await import('openid-client/passport');
-        OpenIDStrategy = passportModule.Strategy;
-      } catch (err) {
-        console.warn('OpenID passport strategy not available, skipping OpenID setup');
-        return;
-      }
+    
+    // Import the OpenID strategy
+    const BaseStrategy = await importOpenIDStrategy();
+    if (!BaseStrategy) {
+      console.warn('OpenID passport strategy not available, skipping OpenID setup');
+      return null;
     }
+    
+    // Create the custom strategy class
+    const CustomOpenIDStrategy = createCustomOpenIDStrategy(BaseStrategy);
     /** @type {ClientMetadata} */
     const clientMetadata = {
       client_id: process.env.OPENID_CLIENT_ID,
