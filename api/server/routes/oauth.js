@@ -1,7 +1,6 @@
 // file deepcode ignore NoRateLimitingForLogin: Rate limiting is handled by the `loginLimiter` middleware
 const express = require('express');
 const passport = require('passport');
-const { randomState } = require('openid-client');
 const {
   checkBan,
   logHeaders,
@@ -106,11 +105,17 @@ router.get(
 /**
  * OpenID Routes
  */
-router.get('/openid', (req, res, next) => {
-  return passport.authenticate('openid', {
-    session: false,
-    state: randomState(),
-  })(req, res, next);
+router.get('/openid', async (req, res, next) => {
+  try {
+    const { randomState } = await import('openid-client');
+    return passport.authenticate('openid', {
+      session: false,
+      state: randomState(),
+    })(req, res, next);
+  } catch (error) {
+    console.error('OpenID client import error:', error);
+    res.redirect(`${domains.client}/oauth/error`);
+  }
 });
 
 router.get(
