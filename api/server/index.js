@@ -31,6 +31,14 @@ const host = process.env.HOST || '0.0.0.0';
 const trusted_proxy = Number(TRUST_PROXY) || 1; /* trust first proxy by default */
 
 const app = express();
+let server;
+
+// Serve static files from client build (for Replit)
+const clientDistPath = path.join(__dirname, '../../client/dist');
+if (fs.existsSync(clientDistPath)) {
+  console.log('Serving static files from:', clientDistPath);
+  app.use(express.static(clientDistPath));
+}
 
 const startServer = async () => {
   if (typeof Bun !== 'undefined') {
@@ -120,24 +128,21 @@ const startServer = async () => {
   app.use('/api/tags', routes.tags);
   app.use('/api/mcp', routes.mcp);
 
-  // Add the error controller one more time after all routes
+  // Replit keep-alive endpoint
+  app.get('/ping', (req, res) => res.send('pong'));
+
+  // Catch-all route for React Router (must be last)
+  const clientDistPath = path.join(__dirname, '../../client/dist');
+  if (fs.existsSync(clientDistPath)) {
+    app.get('*', (req, res) => {
+      res.sendFile(path.join(clientDistPath, 'index.html'));
+    });
+  }
+
+  // Error handling middleware
   app.use(errorController);
 
-  app.use((req, res) => {
-    res.set({
-      'Cache-Control': process.env.INDEX_CACHE_CONTROL || 'no-cache, no-store, must-revalidate',
-      Pragma: process.env.INDEX_PRAGMA || 'no-cache',
-      Expires: process.env.INDEX_EXPIRES || '0',
-    });
-
-    const lang = req.cookies.lang || req.headers['accept-language']?.split(',')[0] || 'en-US';
-    const saneLang = lang.replace(/"/g, '&quot;');
-    const updatedIndexHtml = indexHTML.replace(/lang="en-US"/g, `lang="${saneLang}"`);
-    res.type('html');
-    res.send(updatedIndexHtml);
-  });
-
-  app.listen(port, host, () => {
+  server = app.listen(port, host, () => {
     if (host === '0.0.0.0') {
       logger.info(
         `Server listening on all interfaces at port ${port}. Use http://localhost:${port} to access it`,

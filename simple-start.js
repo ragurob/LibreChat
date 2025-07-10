@@ -1,56 +1,60 @@
-const { spawn } = require('child_process');
-const fs = require('fs');
+
+const express = require('express');
 const path = require('path');
+const fs = require('fs');
 
 console.log('Starting LibreChat for Replit...');
 
-// Ensure data directory exists
-if (!fs.existsSync('./data')) {
-  fs.mkdirSync('./data', { recursive: true });
-}
+// Environment configuration for Replit
+process.env.NODE_ENV = process.env.NODE_ENV || 'production';
+process.env.HOST = process.env.HOST || '0.0.0.0';
+process.env.PORT = process.env.PORT || '5000';
 
-// Set environment variables for Replit
-process.env.NODE_ENV = 'production';
-process.env.HOST = '0.0.0.0';
-process.env.PORT = '5000';
-process.env.TRUST_PROXY = '1';
-
-// Set Replit-specific domains if available
-if (process.env.REPL_SLUG && process.env.REPL_OWNER) {
-  const replitDomain = `https://${process.env.REPL_SLUG}.${process.env.REPL_OWNER}.repl.co`;
-  process.env.DOMAIN_CLIENT = replitDomain;
+// Set Replit-specific domains if not already set
+if (process.env.REPLIT_SLUG && process.env.REPLIT_OWNER && !process.env.DOMAIN_SERVER) {
+  const replitDomain = `https://${process.env.REPLIT_SLUG}.${process.env.REPLIT_OWNER}.repl.co`;
   process.env.DOMAIN_SERVER = replitDomain;
+  process.env.DOMAIN_CLIENT = replitDomain;
 }
 
 console.log('Environment configured for Replit');
 console.log(`Host: ${process.env.HOST}`);
 console.log(`Port: ${process.env.PORT}`);
-console.log(`Domain: ${process.env.DOMAIN_CLIENT}`);
+console.log(`Domain: ${process.env.DOMAIN_SERVER || 'Not set'}`);
 
-// Start the API server directly
+// Check if client build exists
+const clientBuildPath = path.join(__dirname, 'client', 'dist');
+const clientBuildExists = fs.existsSync(clientBuildPath);
+
+if (!clientBuildExists) {
+  console.warn('Client build not found. You may need to build the frontend first.');
+  console.warn('Run: cd client && npm run build');
+}
+
+// Import and start the API server
 console.log('Starting LibreChat API server...');
-const apiServer = spawn('node', ['api/server/index.js'], {
-  stdio: 'inherit',
-  cwd: process.cwd(),
-  env: process.env
+
+// Handle uncaught exceptions
+process.on('uncaughtException', (error) => {
+  console.error('Uncaught Exception:', error);
+  process.exit(1);
 });
 
-apiServer.on('error', (err) => {
-  console.error('Failed to start API server:', err);
+process.on('unhandledRejection', (reason, promise) => {
+  console.error('Unhandled Rejection at:', promise, 'reason:', reason);
+  process.exit(1);
 });
 
-apiServer.on('exit', (code) => {
-  console.log(`API server exited with code ${code}`);
-  process.exit(code);
-});
+// Start the server
+async function startServer() {
+  try {
+    // Import the main server
+    require('./api/server/index.js');
+  } catch (error) {
+    console.error('Failed to start server:', error);
+    console.error('API server exited with code 1');
+    process.exit(1);
+  }
+}
 
-// Handle graceful shutdown
-process.on('SIGINT', () => {
-  console.log('\nShutting down gracefully...');
-  apiServer.kill('SIGINT');
-});
-
-process.on('SIGTERM', () => {
-  console.log('\nReceived SIGTERM, shutting down gracefully...');
-  apiServer.kill('SIGTERM');
-});
+startServer();

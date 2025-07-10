@@ -19,17 +19,27 @@ if (!cached) {
 
 async function connectDb() {
   try {
-    // Add connection options for MongoDB Atlas
-    const options = {
-      maxPoolSize: 10,
-      serverSelectionTimeoutMS: 5000,
+    if (isConnected) {
+      console.green('MongoDB connection already established');
+      return;
+    }
+
+    // Replit-optimized connection settings
+    mongoose.set('strictQuery', true);
+
+    // Set connection options optimized for cloud environments
+    const connectionOptions = {
+      useNewUrlParser: true,
+      useUnifiedTopology: true,
+      serverSelectionTimeoutMS: 10000, // Increased timeout for Replit
       socketTimeoutMS: 45000,
-      family: 4, // Use IPv4, skip trying IPv6
+      maxPoolSize: 10, // Limit connection pool for Replit
       retryWrites: true,
-      w: 'majority'
+      w: 'majority',
+      ...(options || {})
     };
 
-    const conn = await mongoose.connect(MONGO_URI, options);
+    const conn = await mongoose.connect(process.env.MONGO_URI, connectionOptions);
 
     console.log(`MongoDB connected: ${conn.connection.host}`);
 
