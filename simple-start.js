@@ -17,8 +17,8 @@ process.env.PORT = '3080';
 
 console.log('Connecting to MongoDB Atlas...');
 
-// Start the API server directly
-const apiServer = spawn('node', ['api/server/index.js'], {
+// Start the API server using the npm script
+const apiServer = spawn('npm', ['run', 'backend:dev'], {
   stdio: 'inherit',
   cwd: process.cwd(),
   env: process.env
