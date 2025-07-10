@@ -272,11 +272,17 @@ async function setupOpenId() {
   try {
     // Dynamic import for ES modules
     if (!client) {
-      client = await import('openid-client');
+      const openidClient = await import('openid-client');
+      client = openidClient;
     }
     if (!OpenIDStrategy) {
-      const { Strategy } = await import('openid-client/passport');
-      OpenIDStrategy = Strategy;
+      try {
+        const passportModule = await import('openid-client/passport');
+        OpenIDStrategy = passportModule.Strategy;
+      } catch (err) {
+        console.warn('OpenID passport strategy not available, skipping OpenID setup');
+        return;
+      }
     }
     /** @type {ClientMetadata} */
     const clientMetadata = {

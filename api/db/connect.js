@@ -18,29 +18,36 @@ if (!cached) {
 }
 
 async function connectDb() {
-  if (cached.conn && cached.conn?._readyState === 1) {
-    return cached.conn;
-  }
-
-  const disconnected = cached.conn && cached.conn?._readyState !== 1;
-  if (!cached.promise || disconnected) {
-    const opts = {
-      bufferCommands: false,
-      // useNewUrlParser: true,
-      // useUnifiedTopology: true,
-      // bufferMaxEntries: 0,
-      // useFindAndModify: true,
-      // useCreateIndex: true
+  try {
+    // Add connection options for MongoDB Atlas
+    const options = {
+      maxPoolSize: 10,
+      serverSelectionTimeoutMS: 5000,
+      socketTimeoutMS: 45000,
+      family: 4, // Use IPv4, skip trying IPv6
+      retryWrites: true,
+      w: 'majority'
     };
 
-    mongoose.set('strictQuery', true);
-    cached.promise = mongoose.connect(MONGO_URI, opts).then((mongoose) => {
-      return mongoose;
-    });
-  }
-  cached.conn = await cached.promise;
+    const conn = await mongoose.connect(MONGO_URI, options);
 
-  return cached.conn;
+    console.log(`MongoDB connected: ${conn.connection.host}`);
+
+    // Handle connection events
+    mongoose.connection.on('error', (err) => {
+      console.error(`MongoDB connection error: ${err}`);
+    });
+
+    mongoose.connection.on('disconnected', () => {
+      console.warn('MongoDB disconnected');
+    });
+
+    return conn;
+
+  } catch (error) {
+    console.error(`Error connecting to MongoDB: ${error.message}`);
+    process.exit(1);
+  }
 }
 
 module.exports = {
